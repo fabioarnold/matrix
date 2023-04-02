@@ -28,8 +28,8 @@ function init() {
     canvas.width = window.devicePixelRatio * window.innerWidth;
     canvas.height = window.devicePixelRatio * window.innerHeight;
     cellSize = window.devicePixelRatio * 20;
-    numRows = Math.floor(canvas.height / cellSize);
-    numCols = Math.floor(canvas.width / cellSize);
+    numRows = Math.ceil(canvas.height / cellSize);
+    numCols = Math.ceil(canvas.width / cellSize);
     matrix = new Array(numRows * numCols);
     strings = [];
 }
