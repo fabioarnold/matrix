@@ -27,10 +27,10 @@ let strings;
 function init() {
     canvas.width = window.devicePixelRatio * window.innerWidth;
     canvas.height = window.devicePixelRatio * window.innerHeight;
-    cellSize = window.devicePixelRatio * 20;
+    cellSize = window.devicePixelRatio * 16;
     numRows = Math.ceil(canvas.height / cellSize);
     numCols = Math.ceil(canvas.width / cellSize);
-    matrix = new Array(numRows * numCols);
+    matrix = [];
     strings = [];
 }
 
@@ -38,27 +38,30 @@ function tick(deltaTime) {
     let probability = 0.3 * deltaTime * numCols;
     for (; Math.random() < probability; probability -= 1) {
         const col = randomInt(numCols);
-        const speed = 2.4 + 12 * Math.random();
-        const length = 8 + randomInt(16);
-        strings.push({row: -1, col, accum: 0, speed, length})
+        const speed = 2.4 + 24 * Math.random();
+        const length = 8 + randomInt(32);
+        strings.push({row: -1, col, accum: 0, speed, length, symbols: []})
     }
 
-    let i = strings.length;
-    while (i--) {
+    for (let i = strings.length; i--;) {
         const s = strings[i];
         s.accum += deltaTime * s.speed;
         for (; s.accum > 1; s.accum -= 1) {
             s.row++;
-            if (s.row < numRows) {
-                matrix[s.row * numCols + s.col] = alphabet[randomInt(alphabet.length)];
-            }
-            if (s.row - s.length >= numRows) {
+            if (s.row >= numRows + s.length) {
                 strings.splice(i, 1);
                 break;
             }
-            if (s.row - s.length >= 0) {
-                matrix[(s.row - s.length) * numCols + s.col] = undefined;
-            }
+            s.symbols.unshift(alphabet[randomInt(alphabet.length)]);
+            if (s.symbols.length > s.length) s.symbols.pop();
+        }
+    }
+
+    matrix.length = 0;
+    for (let s of strings) {
+        for (let i = 0; i < s.symbols.length; i++) {
+            const color = i == 0 ? "lightgreen" : "hsl(120, 50%, " + (50 - 50 * (i + s.accum) / s.length) + "%)";
+            matrix[(s.row - i) * numCols + s.col] = { color, symbol: s.symbols[i] };
         }
     }
 }
@@ -73,13 +76,11 @@ function draw(time) {
     ctx.textBaseline = "top"
     ctx.font = cellSize + "px sans-serif";
 
-    const heads = [];
-    strings.forEach(s => heads[s.row * numCols + s.col] = true);
     for (let i = 0, row = 0; row < numRows; row++) {
         for (let col = 0; col < numCols; col++, i++) {
             if (matrix[i]) {
-                ctx.fillStyle = heads[i] ? "lightgreen" : "green";
-                ctx.fillText(matrix[i], col * cellSize, row * cellSize);
+                ctx.fillStyle = matrix[i].color;
+                ctx.fillText(matrix[i].symbol, col * cellSize, row * cellSize);
             }
         }
     }
