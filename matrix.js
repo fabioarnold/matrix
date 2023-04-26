@@ -1,5 +1,5 @@
 const canvas = document.querySelector("canvas");
-const ctx = canvas.getContext("2d");
+const gl = canvas.getContext("webgl2");
 const alphabet = [
     "ア", "イ", "ウ", "エ", "オ",
     "カ", "キ", "ク", "ケ", "コ",
@@ -14,15 +14,83 @@ const alphabet = [
 ];
 window.onresize = init;
 
+let numRows;
+let numCols;
+let cellSize = window.devicePixelRatio * 16;
+let strings;
+let matrix;
+
+function createTexture() {
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    return texture;
+}
+
+function createAlphabetTexture() {
+    const canvas2d = document.createElement("canvas");
+    const ctx = canvas2d.getContext("2d");
+    canvas2d.width = cellSize;
+    canvas2d.height = cellSize * alphabet.length;
+    ctx.textBaseline = "middle"
+    ctx.font = cellSize + "px sans-serif";
+    ctx.fillStyle = "white";
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < alphabet.length; i++) {
+        ctx.fillText(alphabet[i], 0, (i + 0.5) * cellSize);
+    }
+    const texture = createTexture();
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas2d);
+    return texture;
+}
+
+gl.activeTexture(gl.TEXTURE1);
+const alphabetTexture = createAlphabetTexture();
+gl.activeTexture(gl.TEXTURE0);
+const matrixTexture = createTexture();
+
+const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+gl.shaderSource(vertexShader, `uniform vec2 scale;
+attribute vec2 position;
+varying vec2 texCoord;
+void main() {
+    texCoord = vec2(position.x, -position.y) * 0.5 + 0.5;
+    gl_Position = vec4(position * scale, 0, 1);
+}`);
+gl.compileShader(vertexShader);
+const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+gl.shaderSource(fragmentShader, `precision highp float;
+uniform sampler2D matrix;
+uniform sampler2D alphabet;
+uniform vec2 matrixSize;
+varying vec2 texCoord;
+void main() {
+    vec4 m = texture2D(matrix, texCoord);
+    vec2 t = mod(texCoord * matrixSize, 1.0);
+    t.y = (t.y + m.a * 255.0) / 48.0;
+    float a = texture2D(alphabet, t).a;
+    gl_FragColor = vec4(m.rgb * a, 1);
+}`);
+gl.compileShader(fragmentShader);
+const program = gl.createProgram();
+gl.attachShader(program, vertexShader);
+gl.attachShader(program, fragmentShader);
+gl.linkProgram(program);
+gl.useProgram(program);
+gl.uniform1i(gl.getUniformLocation(program, "alphabet"), 1);
+
+const positionBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
 function randomInt(max) {
     return Math.floor(Math.random() * max);
 }
-
-let numRows;
-let numCols;
-let cellSize;
-let matrix;
-let strings;
 
 function init() {
     canvas.width = window.devicePixelRatio * window.innerWidth;
@@ -30,8 +98,13 @@ function init() {
     cellSize = window.devicePixelRatio * 16;
     numRows = Math.ceil(canvas.height / cellSize);
     numCols = Math.ceil(canvas.width / cellSize);
-    matrix = [];
     strings = [];
+
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    matrix = new Uint8Array(numRows * numCols * 4);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, numCols, numRows, 0, gl.RGBA, gl.UNSIGNED_BYTE, matrix);
+    gl.uniform2f(gl.getUniformLocation(program, "matrixSize"), numCols, numRows);
+    gl.uniform2f(gl.getUniformLocation(program, "scale"), numCols * cellSize / canvas.width, numRows * cellSize / canvas.height);
 }
 
 function tick(deltaTime) {
@@ -52,16 +125,26 @@ function tick(deltaTime) {
                 strings.splice(i, 1);
                 break;
             }
-            s.symbols.unshift(alphabet[randomInt(alphabet.length)]);
+            s.symbols.unshift(randomInt(alphabet.length));
             if (s.symbols.length > s.length) s.symbols.pop();
         }
     }
 
-    matrix.length = 0;
+    matrix.fill(0);
     for (let s of strings) {
         for (let i = 0; i < s.symbols.length; i++) {
-            const color = i == 0 ? "lightgreen" : "hsl(120, 50%, " + (50 - 50 * (i + s.accum) / s.length) + "%)";
-            matrix[(s.row - i) * numCols + s.col] = { color, symbol: s.symbols[i] };
+            const o = 4 * ((s.row - i) * numCols + s.col);
+            if (i == 0) {
+                matrix[o + 0] = 0x90;
+                matrix[o + 1] = 0xEE;
+                matrix[o + 2] = 0x90;
+            } else {
+                const l = 1 - (i + s.accum) / s.length;
+                matrix[o + 0] = 0x40 * l;
+                matrix[o + 1] = 0xC0 * l;
+                matrix[o + 2] = 0x40 * l;
+            }
+            matrix[o + 3] = s.symbols[i];
         }
     }
 }
@@ -72,18 +155,9 @@ function draw(time) {
     prevTime = time;
     tick(deltaTime);
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.textBaseline = "top"
-    ctx.font = cellSize + "px sans-serif";
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, numCols, numRows, gl.RGBA, gl.UNSIGNED_BYTE, matrix);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-    for (let i = 0, row = 0; row < numRows; row++) {
-        for (let col = 0; col < numCols; col++, i++) {
-            if (matrix[i]) {
-                ctx.fillStyle = matrix[i].color;
-                ctx.fillText(matrix[i].symbol, col * cellSize, row * cellSize);
-            }
-        }
-    }
     window.requestAnimationFrame(draw);
 }
 
