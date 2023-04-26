@@ -1,24 +1,6 @@
 const canvas = document.querySelector("canvas");
-const gl = canvas.getContext("webgl2");
-const alphabet = [
-    "ア", "イ", "ウ", "エ", "オ",
-    "カ", "キ", "ク", "ケ", "コ",
-    "サ", "シ", "ス", "セ", "ソ",
-    "タ", "チ", "ツ", "テ", "ト",
-    "ナ", "ニ", "ヌ", "ネ", "ノ",
-    "ハ", "ヒ", "フ", "ヘ", "ホ",
-    "マ", "ミ", "ム", "メ", "モ",
-    "ヤ", "ユ", "ヨ",
-    "ラ", "リ", "ル", "レ", "ロ",
-    "ワ", "ヰ", "ヱ", "ヲ", "ン"
-];
+const gl = canvas.getContext("webgl");
 window.onresize = init;
-
-let numRows;
-let numCols;
-let cellSize = window.devicePixelRatio * 16;
-let strings;
-let matrix;
 
 function createTexture() {
     const texture = gl.createTexture();
@@ -31,25 +13,19 @@ function createTexture() {
 }
 
 function createAlphabetTexture() {
-    const canvas2d = document.createElement("canvas");
-    const ctx = canvas2d.getContext("2d");
-    canvas2d.width = cellSize;
-    canvas2d.height = cellSize * alphabet.length;
-    ctx.textBaseline = "middle"
-    ctx.font = cellSize + "px sans-serif";
-    ctx.fillStyle = "white";
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (let i = 0; i < alphabet.length; i++) {
-        ctx.fillText(alphabet[i], 0, (i + 0.5) * cellSize);
-    }
     const texture = createTexture();
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas2d);
+    const image = new Image();
+    image.onload = () => {
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+        gl.activeTexture(gl.TEXTURE0);
+    };
+    image.src = "alphabet.png";
     return texture;
 }
 
-gl.activeTexture(gl.TEXTURE1);
 const alphabetTexture = createAlphabetTexture();
-gl.activeTexture(gl.TEXTURE0);
 const matrixTexture = createTexture();
 
 const vertexShader = gl.createShader(gl.VERTEX_SHADER);
@@ -92,6 +68,12 @@ function randomInt(max) {
     return Math.floor(Math.random() * max);
 }
 
+let numRows;
+let numCols;
+let cellSize;
+let strings;
+let matrix;
+
 function init() {
     canvas.width = window.devicePixelRatio * window.innerWidth;
     canvas.height = window.devicePixelRatio * window.innerHeight;
@@ -125,7 +107,7 @@ function tick(deltaTime) {
                 strings.splice(i, 1);
                 break;
             }
-            s.symbols.unshift(randomInt(alphabet.length));
+            s.symbols.unshift(randomInt(48));
             if (s.symbols.length > s.length) s.symbols.pop();
         }
     }
