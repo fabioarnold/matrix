@@ -1,6 +1,7 @@
 const canvas = document.querySelector("canvas");
 const gl = canvas.getContext("webgl");
 window.onresize = init;
+window.onmousemove = e => mouseMove(e.clientX / window.innerWidth, e.clientY / window.innerHeight);
 
 function createTexture() {
     const texture = gl.createTexture();
@@ -87,6 +88,19 @@ function init() {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, numCols, numRows, 0, gl.RGBA, gl.UNSIGNED_BYTE, matrix);
     gl.uniform2f(gl.getUniformLocation(program, "matrixSize"), numCols, numRows);
     gl.uniform2f(gl.getUniformLocation(program, "scale"), numCols * cellSize / canvas.width, numRows * cellSize / canvas.height);
+}
+
+let lastCol;
+let lastRow;
+function mouseMove(x, y) {
+    const col = Math.floor(x * numCols);
+    const row = Math.floor(y * numRows);
+    if (col === lastCol && row === lastRow) return;
+    lastCol = col;
+    lastRow = row;
+    const speed = 2.4 + 24 * Math.random();
+    const length = 8 + randomInt(32);
+    strings.push({row: row - 1, col, accum: 0, speed, length, symbols: []})
 }
 
 function tick(deltaTime) {
